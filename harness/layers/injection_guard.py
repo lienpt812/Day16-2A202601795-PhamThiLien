@@ -47,6 +47,9 @@ nên lớp cần "chốt hạ" cuối cùng phải đứng đầu tiên.
 
 from __future__ import annotations
 
+from arena.corpus import INJECTION_CANARY
+from arena.tools import ToolResult
+
 from harness.middleware import Middleware
 
 #: Dấu mốc của đoạn nội dung không đáng tin trong kho tài liệu.
@@ -69,10 +72,24 @@ class InjectionGuard(Middleware):
         #     cắt từ BLOCK_START tới hết chuỗi.
         #  3. Lặp lại cho tới khi không còn BLOCK_START nào.
         #  4. Trả về ToolResult(ok=result.ok, content=<đã sạch>, error=result.error).
-        return result  # <- mặc định KHÔNG LÀM GÌ: agent vẫn chạy được
+        content = result.content
+        if BLOCK_START not in content:
+            return result
+
+        while BLOCK_START in content:
+            start = content.find(BLOCK_START)
+            end = content.find(BLOCK_END, start)
+            if end == -1:
+                content = content[:start] + PLACEHOLDER
+            else:
+                content = content[:start] + PLACEHOLDER + content[end + len(BLOCK_END) :]
+        return ToolResult(ok=result.ok, content=content, error=result.error)
 
     def after_agent(self, ctx, report):
         # TODO (§10): 2-4 dòng.
         #  Nếu INJECTION_CANARY còn trong report["answer"] thì gỡ nó ra.
         #  Chỉ sửa "answer" — tuyệt đối không sửa text của claim.
-        return report  # <- mặc định KHÔNG LÀM GÌ
+        answer = report.get("answer")
+        if isinstance(answer, str) and INJECTION_CANARY in answer:
+            report["answer"] = answer.replace(INJECTION_CANARY, "").strip()
+        return report
