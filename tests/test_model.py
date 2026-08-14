@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -28,6 +29,14 @@ from pathlib import Path
 import pytest
 
 from arena.corpus import INJECTION_CANARY, Corpus
+
+
+def _subprocess_env(**extra):
+    env = os.environ.copy()
+    env.setdefault("PYTHONUTF8", "1")
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.update(extra)
+    return env
 from arena.model import (
     ARENA_SYSTEM_PROMPT,
     DEGRADED_MARKERS,
@@ -790,7 +799,7 @@ def test_determinism_across_separate_processes(hashseed):
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
-        env={"PYTHONHASHSEED": hashseed, "PATH": "/usr/bin:/bin"},
+        env=_subprocess_env(PYTHONHASHSEED=hashseed),
         cwd=str(REPO_ROOT),
         check=True,
     )
@@ -802,7 +811,7 @@ def test_determinism_across_separate_processes(hashseed):
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
-        env={"PYTHONHASHSEED": "12345", "PATH": "/usr/bin:/bin"},
+        env=_subprocess_env(PYTHONHASHSEED="12345"),
         cwd=str(REPO_ROOT),
         check=True,
     )

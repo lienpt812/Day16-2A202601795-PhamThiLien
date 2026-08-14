@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import time
@@ -64,6 +65,14 @@ from arena.runner import (
     strip_timing,
     synthetic_abstain_report,
 )
+
+
+def _subprocess_env(**extra):
+    env = os.environ.copy()
+    env.setdefault("PYTHONUTF8", "1")
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.update(extra)
+    return env
 from arena.scorer import MODEL_OUTPUT_FIELD, score_run
 from arena.tools import Tools
 from arena.trace import Trace
@@ -667,6 +676,7 @@ def test_a_gigantic_model_output_still_yields_a_scoreable_run():
         ("many real finals", "\n".join(['FINAL: {"answer": "a", "claims": []}'] * 5_000)),
         ("deep brackets", "FINAL: " + "[" * 2_000 + "]" * 2_000),
     ],
+    ids=["prose", "braces", "junk", "finals", "brackets"],
 )
 def test_normalisation_is_bounded_on_pathological_output(name, text):
     """A per-turn cost, so it must stay milliseconds even on hostile
@@ -1206,7 +1216,7 @@ def test_two_processes_produce_byte_identical_traces():
         proc = subprocess.run(
             [sys.executable, "-c", DETERMINISM_SNIPPET.format(root=str(LAB_ROOT))],
             capture_output=True, text=True, cwd=str(LAB_ROOT),
-            env={"PATH": "/usr/bin:/bin", "PYTHONHASHSEED": hashseed},
+            env=_subprocess_env(PYTHONHASHSEED=hashseed),
         )
         assert proc.returncode == 0, proc.stderr[-2000:]
         outputs_.append(json.loads(proc.stdout))
@@ -1239,7 +1249,7 @@ def _script(name, *args, expect=0):
     proc = subprocess.run(
         [sys.executable, f"scripts/{name}", *args],
         capture_output=True, text=True, cwd=str(LAB_ROOT),
-        env={"PATH": "/usr/bin:/bin"},
+        env=_subprocess_env(),
     )
     assert proc.returncode == expect, (proc.returncode, proc.stdout[-2000:], proc.stderr[-2000:])
     return proc
@@ -1320,7 +1330,7 @@ def test_run_practice_refuses_the_real_path_without_credentials():
     proc = subprocess.run(
         [sys.executable, "scripts/run_practice.py", "--model", "real", "--brief",
          "pub-01-sla-hien-hanh"],
-        capture_output=True, text=True, cwd=str(LAB_ROOT), env={"PATH": "/usr/bin:/bin"},
+        capture_output=True, text=True, cwd=str(LAB_ROOT), env=_subprocess_env(),
     )
     assert proc.returncode != 0
     combined = proc.stdout + proc.stderr

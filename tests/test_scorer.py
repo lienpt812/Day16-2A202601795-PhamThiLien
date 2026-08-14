@@ -20,6 +20,7 @@ That is what catches weighting sign errors the unit tests miss.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import time
@@ -30,6 +31,14 @@ from pathlib import Path
 import pytest
 
 from arena.briefs import RUNG_1_TOTAL
+
+
+def _subprocess_env(**extra):
+    env = os.environ.copy()
+    env.setdefault("PYTHONUTF8", "1")
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.update(extra)
+    return env
 from arena.corpus import INJECTION_CANARY, Corpus
 from arena.model import (
     ARENA_SYSTEM_PROMPT,
@@ -2150,7 +2159,7 @@ def test_scoring_is_identical_across_separate_processes(hashseed):
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
-        env={"PYTHONHASHSEED": hashseed, "PATH": "/usr/bin:/bin"},
+        env=_subprocess_env(PYTHONHASHSEED=hashseed),
     )
     assert out.returncode == 0, out.stderr
     local = score_run(BRIEF_SLA, PERFECT_REPORT, trace_jsonl=SLA_TRACE, corpus=CORPUS)

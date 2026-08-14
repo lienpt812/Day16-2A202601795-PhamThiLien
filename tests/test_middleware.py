@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -27,6 +28,14 @@ from pathlib import Path
 import pytest
 
 from arena.corpus import INJECTION_CANARY
+
+
+def _subprocess_env(**extra):
+    env = os.environ.copy()
+    env.setdefault("PYTHONUTF8", "1")
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.update(extra)
+    return env
 from arena.model import (
     ARENA_SYSTEM_PROMPT,
     FABRICATED_ABSENT_CLAIM,
@@ -815,7 +824,7 @@ def _digest(hash_seed: str, brief: dict) -> str:
         [sys.executable, "-c", code],
         capture_output=True,
         text=True,
-        env={"PYTHONHASHSEED": hash_seed, "PATH": "/usr/bin:/bin"},
+        env=_subprocess_env(PYTHONHASHSEED=hash_seed),
         cwd=str(REPO_ROOT),
         timeout=120,
     )

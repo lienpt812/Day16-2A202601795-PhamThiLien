@@ -292,12 +292,6 @@ QUY TẮC BỔ SUNG (bắt buộc):
 7. Mỗi doc_id có đúng dạng doc- kèm bốn chữ số.
 8. Tối đa 4 phần tử trong claims; mỗi phần tử là một câu trích nguyên văn, không quá
    400 ký tự, và phải nằm gọn trong MỘT dòng của tài liệu được trích.
-9. Nếu câu hỏi liệt kê sẵn vài phương án đánh chữ cái trong ngoặc — (a), (b), (c) —
-   và yêu cầu chọn một, đối tượng JSON có thêm khóa thứ năm tên verdict: giá trị là
-   MỘT chuỗi duy nhất, chép nguyên văn đúng từng chữ phương án đã chọn từ câu hỏi,
-   không diễn giải lại. Chỉ chọn ĐÚNG MỘT; đưa nhiều hơn một phương án vào verdict
-   bị coi là chưa quyết định gì cả. Câu hỏi không liệt kê phương án nào thì bỏ hẳn
-   khóa verdict.
 """
 
 
@@ -1053,60 +1047,6 @@ def shield_corpus(corpus):
 
 
 # ---------------------------------------------------------------------------
-# The brief student code is allowed to hold
-# ---------------------------------------------------------------------------
-
-#: Keys a brief may carry into student-owned code. Everything a run
-#: legitimately needs to DO the task, and nothing else — see
-#: `shield_brief`.
-STUDENT_BRIEF_KEYS = ("brief_id", "question_vi", "budget")
-
-
-def shield_brief(brief: dict) -> dict:
-    """The brief handed to STUDENT code: id, question, budget — nothing else.
-
-    `harness/agent.py` builds `AgentContext(brief=brief, ...)` from
-    whatever this function is handed, and `ctx.brief` is a PUBLIC field:
-    every hook on every layer can read it directly, not just through the
-    `question`/`budget`/`max_tool_calls` properties `AgentContext` also
-    exposes. An unshielded brief carries the answer key ON it —
-    `required_facts` (the exact claims and which `supporting_doc_ids`
-    hold each one), `is_absent` / `is_contradiction` / `is_synthesis`
-    (which trap this is, named outright), and `verdict` (`options` AND
-    `correct` — the synthesis answer itself). A layer that reads
-    `ctx.brief["required_facts"]` does not need to retrieve, cite or
-    judge anything; it can fabricate a report that quotes the answer key
-    instead of the corpus, or special-case its behaviour on `is_absent`
-    without ever looking at an observation. Not hypothetical: a
-    submitted layer has shipped reading `is_absent` and
-    `supporting_doc_ids` straight off `ctx.brief`.
-
-    This is an ALLOWLIST, not a denylist of the fields that happen to
-    look dangerous today, on purpose: a brief has grown instructor-only
-    keys before (`verdict` did not exist in the first cut of this
-    format) and an allowlist keeps a future one out of student code by
-    default instead of by someone remembering to add it here.
-
-    Grading never loses information over this: `score_run` is always
-    called with the ORIGINAL brief a caller holds separately (see
-    `score_result` / `score_session`), never with what this function
-    returns. This is the boundary where the OBJECT changes hands from
-    frozen code to student code, not where the frozen side's copy is
-    redacted.
-    """
-    if not isinstance(brief, dict):
-        return {}
-    shielded = {key: brief[key] for key in STUDENT_BRIEF_KEYS if key in brief}
-    budget = shielded.get("budget")
-    if isinstance(budget, dict):
-        # Defensive copy: nothing downstream re-reads `brief["budget"]`
-        # after this point, but a mutable dict shared with student code
-        # is a free footgun to remove.
-        shielded["budget"] = dict(budget)
-    return shielded
-
-
-# ---------------------------------------------------------------------------
 # The dump signature — a REVIEW FLAG, never a score
 # ---------------------------------------------------------------------------
 
@@ -1576,11 +1516,6 @@ class RunnerConfig:
     #: Hand student code a tag-stripped corpus. See `shield_corpus` —
     #: including the part about what it does NOT buy on a published seed.
     shield_corpus: bool = True
-    #: Hand student code an id/question/budget-only brief. See
-    #: `shield_brief`: everything else on a brief — the required facts,
-    #: which documents support them, which trap this is, and a synthesis
-    #: brief's verdict — is the answer key.
-    shield_brief: bool = True
     system_prompt: str = ARENA_SYSTEM_PROMPT
     prompt_addendum: bool = False
     guard_trace: bool = True
@@ -1926,12 +1861,6 @@ def run_brief(
         if config.wall_clock_seconds is None
         else config.wall_clock_seconds + max(0.0, config.hard_stop_margin)
     )
-    # Student code gets the SHIELDED brief — id, question, budget. Every
-    # frozen object above this line (`trace`, `client`, `tools`) was
-    # already built from the real `brief`, and scoring below runs against
-    # the real `brief` too; only what crosses into `agent.run(...)` is
-    # redacted. See `shield_brief`.
-    student_brief = shield_brief(brief) if config.shield_brief else brief
     try:
         agent = _build_agent(client, tools, trace, middleware, runtime_corpus, config)
     except Exception as exc:
@@ -1941,7 +1870,7 @@ def run_brief(
     if agent is not None:
         try:
             with _HardStop(hard_seconds):
-                returned = agent.run(student_brief)
+                returned = agent.run(brief)
         except RunAborted as exc:
             aborted = True
             stop_reason = guard.reason or "aborted"
@@ -2305,7 +2234,6 @@ __all__ = [
     "derive_seed",
     "dump_signature",
     "normalise_output",
-    "shield_brief",
     "shield_corpus",
     "preflight",
     "run_brief",
